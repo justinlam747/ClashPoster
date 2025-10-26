@@ -10,6 +10,7 @@ export default function RevealImposter({
   imposterCard,
   imposterMode,
   skipToReveal,
+  playerNames,
   onRestart,
   onShare,
 }) {
@@ -51,7 +52,7 @@ export default function RevealImposter({
                     >
                       <div className="flex items-baseline gap-2 mb-1">
                         <span className="text-yellow-300 font-bold text-lg drop-shadow">
-                          Player {entry.player}:
+                          {entry.playerName}:
                         </span>
                         <span className="text-white text-lg">
                           {entry.words || <em className="text-white/50">No input</em>}
@@ -81,7 +82,7 @@ export default function RevealImposter({
                     {discussionSummary.map((entry, index) => (
                       <div key={index} className="mb-3 text-lg">
                         <span className="text-yellow-300 font-bold drop-shadow">
-                          Player {entry.player}:
+                          {entry.playerName}:
                         </span>{' '}
                         <span className="text-white">
                           {entry.words || <em className="text-white/50">No input</em>}
@@ -99,7 +100,7 @@ export default function RevealImposter({
                       The Imposter{imposterIndices.length > 1 ? 's' : ''} {imposterIndices.length > 1 ? 'were' : 'was'}...
                     </h2>
                     <div className="text-5xl font-bold text-yellow-300 mb-6 drop-shadow-lg">
-                      {imposterIndices.map((idx) => `Player ${idx + 1}`).join(' & ')}
+                      {imposterIndices.map((idx) => playerNames[idx] || `Player ${idx + 1}`).join(' & ')}
                     </div>
                   </div>
 

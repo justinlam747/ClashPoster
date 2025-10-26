@@ -6,7 +6,7 @@ import { useState } from 'react';
  */
 export default function DiscussionRound({
   roundNumber,
-  playerNumber,
+  playerName,
   previousWords,
   onSubmit,
 }) {
@@ -31,7 +31,7 @@ export default function DiscussionRound({
           Round {roundNumber}
         </div>
         <h2 className="text-4xl text-3d-gold">
-          Player {playerNumber}
+          {playerName}
         </h2>
       </div>
 

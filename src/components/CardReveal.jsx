@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
  * CardReveal component - Shows the player's card with flip animation
  * Displays either the card name or "IMPOSTER 👀" based on role
  */
-export default function CardReveal({ card, playerNumber, onNext }) {
+export default function CardReveal({ card, playerName, onNext }) {
   const [isFlipped, setIsFlipped] = useState(false);
 
   // Auto-flip after a short delay
@@ -45,12 +45,12 @@ export default function CardReveal({ card, playerNumber, onNext }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
       <div className="max-w-md w-full flex flex-col items-center">
-        {/* Player Number Header - Modern pill badge */}
+        {/* Player Name Header - Modern pill badge */}
         <div className="mb-8">
           <div className="inline-flex items-center px-6 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
             <div className="w-2 h-2 rounded-full bg-gradient-to-r from-blue-400 to-yellow-400 mr-3 animate-pulse"></div>
             <h3 className="text-white text-sm font-semibold tracking-wide">
-              PLAYER {playerNumber}
+              {playerName.toUpperCase()}
             </h3>
           </div>
         </div>

@@ -14,6 +14,27 @@ export default function GameSetup({ onStartGame }) {
   const [numRounds, setNumRounds] = useState(2);
   const [skipToReveal, setSkipToReveal] = useState(false);
   const [showCardList, setShowCardList] = useState(false);
+  const [playerNames, setPlayerNames] = useState(Array(5).fill('').map((_, i) => `Player ${i + 1}`));
+  const [showNameInput, setShowNameInput] = useState(false);
+
+  // Update player names array when numPlayers changes
+  const handleNumPlayersChange = (newNum) => {
+    setNumPlayers(newNum);
+    const newNames = Array(newNum).fill('').map((_, i) => {
+      if (i < playerNames.length) {
+        return playerNames[i];
+      }
+      return `Player ${i + 1}`;
+    });
+    setPlayerNames(newNames);
+  };
+
+  // Update a specific player's name
+  const handleNameChange = (index, name) => {
+    const newNames = [...playerNames];
+    newNames[index] = name || `Player ${index + 1}`;
+    setPlayerNames(newNames);
+  };
 
   // Validate and start the game
   const handleStartGame = () => {
@@ -33,7 +54,8 @@ export default function GameSetup({ onStartGame }) {
       imposterMode,
       similarityThreshold,
       numRounds,
-      skipToReveal
+      skipToReveal,
+      playerNames
     });
   };
 
@@ -81,9 +103,38 @@ export default function GameSetup({ onStartGame }) {
                   min="3"
                   max="10"
                   value={numPlayers}
-                  onChange={(e) => setNumPlayers(parseInt(e.target.value))}
+                  onChange={(e) => handleNumPlayersChange(parseInt(e.target.value))}
                   className="w-full bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 transition-all"
                 />
+              </div>
+
+              {/* Player Names */}
+              <div>
+                <button
+                  onClick={() => setShowNameInput(!showNameInput)}
+                  className="w-full bg-white/10 backdrop-blur-md border border-white/30 text-white font-semibold py-3 rounded-xl hover:bg-white/20 transition-all flex items-center justify-between px-4"
+                >
+                  <span>Set Player Names</span>
+                  <span>{showNameInput ? '▲' : '▼'}</span>
+                </button>
+                {showNameInput && (
+                  <div className="mt-3 space-y-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-4">
+                    {playerNames.map((name, index) => (
+                      <div key={index}>
+                        <label className="block text-white text-xs mb-1">
+                          Player {index + 1}
+                        </label>
+                        <input
+                          type="text"
+                          value={name}
+                          onChange={(e) => handleNameChange(index, e.target.value)}
+                          placeholder={`Player ${index + 1}`}
+                          className="w-full bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400/50 transition-all"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Number of Imposters */}
@@ -141,7 +192,7 @@ export default function GameSetup({ onStartGame }) {
                   <input
                     type="range"
                     min="1"
-                    max="5"
+                    max="4"
                     value={similarityThreshold}
                     onChange={(e) => setSimilarityThreshold(parseInt(e.target.value))}
                     className="w-full accent-yellow-400"

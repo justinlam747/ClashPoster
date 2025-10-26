@@ -10,6 +10,7 @@ import {
   initializeDiscussion,
   formatDiscussionForDisplay,
   getPreviousWords,
+  createRandomPlayerOrder,
 } from './utils/gameLogic';
 
 /**
@@ -29,7 +30,7 @@ function App() {
   const [skipToReveal, setSkipToReveal] = useState(false);
 
   // Game state
-  const [currentPlayer, setCurrentPlayer] = useState(0); // 0-based index
+  const [currentPlayer, setCurrentPlayer] = useState(0); // 0-based index into playerOrder
   const [currentRound, setCurrentRound] = useState(0); // 0-based index
   const [imposters, setImposters] = useState([]); // Array of imposter indices
   const [playerCards, setPlayerCards] = useState([]); // Array of card objects for each player
@@ -37,12 +38,14 @@ function App() {
   const [imposterCard, setImposterCard] = useState(null); // The similar card imposters have (if mode is 'similar')
   const [discussionInputs, setDiscussionInputs] = useState([]); // 2D array [round][player]
   const [showingCard, setShowingCard] = useState(false); // Whether we're showing the card or pass screen
+  const [playerNames, setPlayerNames] = useState([]); // Array of player names
+  const [playerOrder, setPlayerOrder] = useState([]); // Randomized order of player indices
 
   /**
    * Start the game with configured settings
    */
   const handleStartGame = (settings) => {
-    const { numPlayers, numImposters, imposterMode, similarityThreshold, numRounds, skipToReveal } =
+    const { numPlayers, numImposters, imposterMode, similarityThreshold, numRounds, skipToReveal, playerNames } =
       settings;
 
     // Store settings
@@ -52,6 +55,11 @@ function App() {
     setSimilarityThreshold(similarityThreshold);
     setNumRounds(numRounds);
     setSkipToReveal(skipToReveal);
+    setPlayerNames(playerNames);
+
+    // Create randomized player order
+    const randomOrder = createRandomPlayerOrder(numPlayers);
+    setPlayerOrder(randomOrder);
 
     // Assign imposters
     const imposterIndices = assignImposters(numPlayers, numImposters);
@@ -77,7 +85,7 @@ function App() {
     setCurrentRound(0);
     setShowingCard(false);
 
-    // Start with pass screen for Player 1
+    // Start with pass screen for first player in randomized order
     setGamePhase('pass');
   };
 
@@ -118,12 +126,15 @@ function App() {
    * Handle discussion input submission
    */
   const handleDiscussionSubmit = (input) => {
+    // Get the actual player index from randomized order
+    const actualPlayerIndex = playerOrder[currentPlayer];
+
     // Update discussion inputs
     const updatedInputs = [...discussionInputs];
-    updatedInputs[currentRound][currentPlayer] = input;
+    updatedInputs[currentRound][actualPlayerIndex] = input;
     setDiscussionInputs(updatedInputs);
 
-    // Move to next player
+    // Move to next player in order
     const nextPlayer = currentPlayer + 1;
 
     if (nextPlayer < numPlayers) {
@@ -162,6 +173,10 @@ function App() {
     alert('Share functionality! Take a screenshot or use the download button.');
   };
 
+  // Get current player index from randomized order
+  const currentPlayerIndex = playerOrder[currentPlayer] || 0;
+  const currentPlayerName = playerNames[currentPlayerIndex] || `Player ${currentPlayerIndex + 1}`;
+
   // Render appropriate screen based on game phase
   return (
     <div className="min-h-screen bg-blue-950 flex items-center justify-center p-4">
@@ -170,15 +185,15 @@ function App() {
 
         {gamePhase === 'pass' && (
           <PassDevice
-            playerNumber={currentPlayer + 1}
+            playerName={currentPlayerName}
             onContinue={handleRevealCard}
           />
         )}
 
         {gamePhase === 'reveal' && (
           <CardReveal
-            card={playerCards[currentPlayer]}
-            playerNumber={currentPlayer + 1}
+            card={playerCards[currentPlayerIndex]}
+            playerName={currentPlayerName}
             onNext={handleNextPlayer}
           />
         )}
@@ -186,10 +201,10 @@ function App() {
         {gamePhase === 'discussion' && (
           <DiscussionRound
             roundNumber={currentRound + 1}
-            playerNumber={currentPlayer + 1}
+            playerName={currentPlayerName}
             previousWords={getPreviousWords(
               discussionInputs,
-              currentPlayer,
+              currentPlayerIndex,
               currentRound
             )}
             onSubmit={handleDiscussionSubmit}
@@ -200,13 +215,16 @@ function App() {
           <RevealImposter
             discussionSummary={formatDiscussionForDisplay(
               discussionInputs,
-              numPlayers
+              numPlayers,
+              playerNames,
+              playerOrder
             )}
             imposterIndices={imposters}
             realCard={realCard}
             imposterCard={imposterCard}
             imposterMode={imposterMode}
             skipToReveal={skipToReveal}
+            playerNames={playerNames}
             onRestart={handleRestart}
             onShare={handleShare}
           />

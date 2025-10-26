@@ -1,8 +1,8 @@
 /**
  * PassDevice component - Interstitial screen between player reveals
- * Shows "Pass device to Player X" message
+ * Shows "Pass device to [Player Name]" message
  */
-export default function PassDevice({ playerNumber, onContinue }) {
+export default function PassDevice({ playerName, onContinue }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
@@ -32,7 +32,7 @@ export default function PassDevice({ playerNumber, onContinue }) {
                 Hand the device to
               </p>
               <p className="text-3xl font-bold text-white drop-shadow-lg">
-                Player {playerNumber}
+                {playerName}
               </p>
             </div>
 
@@ -53,7 +53,7 @@ export default function PassDevice({ playerNumber, onContinue }) {
 
               <span className="relative z-10 text-blue-950 flex items-center justify-center gap-2">
                 <span>👁️</span>
-                Player {playerNumber}, tap to reveal your card
+                {playerName}, tap to reveal your card
               </span>
             </button>
           </div>

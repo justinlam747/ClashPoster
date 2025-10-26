@@ -1,6 +1,23 @@
 import { parseCards, findSimilarCard } from '../data/cardData.js';
 
 /**
+ * Create a randomized play order for players
+ * @param {number} numPlayers - Total number of players
+ * @returns {Array} Array of player indices in randomized order
+ */
+export function createRandomPlayerOrder(numPlayers) {
+  const order = Array.from({ length: numPlayers }, (_, i) => i);
+
+  // Fisher-Yates shuffle
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+
+  return order;
+}
+
+/**
  * Randomly assign imposters from the player pool
  * @param {number} numPlayers - Total number of players
  * @param {number} numImposters - Number of imposters to assign
@@ -25,7 +42,7 @@ export function assignImposters(numPlayers, numImposters) {
  * @param {number} numPlayers - Total number of players
  * @param {Array} imposterIndices - Array of imposter player indices
  * @param {string} imposterMode - 'text' or 'similar'
- * @param {number} similarityThreshold - Number of attributes that must match (1-5)
+ * @param {number} similarityThreshold - Number of attributes that must match (1-4)
  * @returns {Object} { playerCards: Array, realCard: Object, imposterCard: Object|null }
  */
 export function assignCards(numPlayers, imposterIndices, imposterMode, similarityThreshold) {
@@ -78,18 +95,23 @@ export function initializeDiscussion(numPlayers, numRounds) {
  * Format discussion data for display
  * @param {Array} discussionInputs - 2D array [round][player] of discussion inputs
  * @param {number} numPlayers - Total number of players
+ * @param {Array} playerNames - Array of player names
+ * @param {Array} playerOrder - Randomized order of player indices
  * @returns {Array} Array of player discussion strings
  */
-export function formatDiscussionForDisplay(discussionInputs, numPlayers) {
+export function formatDiscussionForDisplay(discussionInputs, numPlayers, playerNames, playerOrder) {
   const formatted = [];
 
-  for (let playerIndex = 0; playerIndex < numPlayers; playerIndex++) {
+  // Display in the order players took turns (randomized order)
+  for (let orderIndex = 0; orderIndex < numPlayers; orderIndex++) {
+    const playerIndex = playerOrder[orderIndex];
     const playerWords = discussionInputs
       .map(round => round[playerIndex])
       .filter(word => word.trim() !== '');
 
     formatted.push({
-      player: playerIndex + 1,
+      playerIndex: playerIndex,
+      playerName: playerNames[playerIndex] || `Player ${playerIndex + 1}`,
       words: playerWords.join(', ')
     });
   }

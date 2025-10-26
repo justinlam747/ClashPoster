@@ -16,11 +16,10 @@ export function parseCards() {
     // Create card object with relevant attributes
     const card = {
       name: values[0],
-      elixir: parseInt(values[7]) || 0,
-      type: values[8] || 'none',
-      category: values[9] || 'none',
-      element: values[10] || 'none',
-      family: values[11] || 'none'
+      type: values[1] || 'none',
+      category: values[2] || 'none',
+      element: values[3] || 'none',
+      family: values[4] || 'none'
     };
 
     cards.push(card);
@@ -33,12 +32,11 @@ export function parseCards() {
  * Calculate similarity score between two cards based on matching attributes
  * @param {Object} card1 - First card object
  * @param {Object} card2 - Second card object
- * @returns {number} Number of matching attributes (0-5)
+ * @returns {number} Number of matching attributes (0-4)
  */
 export function calculateSimilarity(card1, card2) {
   let matches = 0;
 
-  if (card1.elixir === card2.elixir) matches++;
   if (card1.type === card2.type) matches++;
   if (card1.category === card2.category) matches++;
   if (card1.element === card2.element && card1.element !== 'none') matches++;
@@ -50,7 +48,7 @@ export function calculateSimilarity(card1, card2) {
 /**
  * Find a similar card based on a similarity threshold
  * @param {Object} realCard - The real card assigned to most players
- * @param {number} threshold - Minimum number of attributes that must match (1-5)
+ * @param {number} threshold - Minimum number of attributes that must match (1-4)
  * @param {Array} allCards - Array of all available cards
  * @returns {Object} A similar card that meets the threshold
  */
