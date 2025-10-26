@@ -39,7 +39,8 @@ function App() {
   const [discussionInputs, setDiscussionInputs] = useState([]); // 2D array [round][player]
   const [showingCard, setShowingCard] = useState(false); // Whether we're showing the card or pass screen
   const [playerNames, setPlayerNames] = useState([]); // Array of player names
-  const [playerOrder, setPlayerOrder] = useState([]); // Randomized order of player indices
+  const [playerOrder, setPlayerOrder] = useState([]); // Randomized order of player indices for card reveals
+  const [discussionOrders, setDiscussionOrders] = useState([]); // Array of randomized orders, one per discussion round
 
   /**
    * Start the game with configured settings
@@ -57,9 +58,16 @@ function App() {
     setSkipToReveal(skipToReveal);
     setPlayerNames(playerNames);
 
-    // Create randomized player order
+    // Create randomized player order for card reveals
     const randomOrder = createRandomPlayerOrder(numPlayers);
     setPlayerOrder(randomOrder);
+
+    // Create randomized orders for each discussion round
+    const roundOrders = [];
+    for (let i = 0; i < numRounds; i++) {
+      roundOrders.push(createRandomPlayerOrder(numPlayers));
+    }
+    setDiscussionOrders(roundOrders);
 
     // Assign imposters
     const imposterIndices = assignImposters(numPlayers, numImposters);
@@ -126,8 +134,9 @@ function App() {
    * Handle discussion input submission
    */
   const handleDiscussionSubmit = (input) => {
-    // Get the actual player index from randomized order
-    const actualPlayerIndex = playerOrder[currentPlayer];
+    // Get the actual player index from the current round's randomized order
+    const currentRoundOrder = discussionOrders[currentRound] || [];
+    const actualPlayerIndex = currentRoundOrder[currentPlayer];
 
     // Update discussion inputs
     const updatedInputs = [...discussionInputs];
@@ -145,7 +154,7 @@ function App() {
       const nextRound = currentRound + 1;
 
       if (nextRound < numRounds) {
-        // Start next round
+        // Start next round with new randomized order
         setCurrentPlayer(0);
         setCurrentRound(nextRound);
       } else {
@@ -173,8 +182,15 @@ function App() {
     alert('Share functionality! Take a screenshot or use the download button.');
   };
 
-  // Get current player index from randomized order
-  const currentPlayerIndex = playerOrder[currentPlayer] || 0;
+  // Get current player index based on game phase
+  // For card reveals, use playerOrder; for discussions, use the current round's order
+  let currentPlayerIndex = 0;
+  if (gamePhase === 'pass' || gamePhase === 'reveal') {
+    currentPlayerIndex = playerOrder[currentPlayer] || 0;
+  } else if (gamePhase === 'discussion') {
+    const currentRoundOrder = discussionOrders[currentRound] || [];
+    currentPlayerIndex = currentRoundOrder[currentPlayer] || 0;
+  }
   const currentPlayerName = playerNames[currentPlayerIndex] || `Player ${currentPlayerIndex + 1}`;
 
   // Render appropriate screen based on game phase
@@ -217,7 +233,7 @@ function App() {
               discussionInputs,
               numPlayers,
               playerNames,
-              playerOrder
+              discussionOrders.length > 0 ? discussionOrders[0] : playerOrder
             )}
             imposterIndices={imposters}
             realCard={realCard}
