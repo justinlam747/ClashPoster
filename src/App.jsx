@@ -1,251 +1,456 @@
-import { useState } from 'react';
-import GameSetup from './components/GameSetup';
-import PassDevice from './components/PassDevice';
+import { useState, useEffect } from 'react';
+import { useSocket } from './context/SocketContext';
+
+// Multiplayer components
+import MainMenu from './components/multiplayer/MainMenu';
+import LobbyCreate from './components/multiplayer/LobbyCreate';
+import LobbyJoin from './components/multiplayer/LobbyJoin';
+import WaitingRoom from './components/multiplayer/WaitingRoom';
+import GameChat from './components/multiplayer/GameChat';
+
+// Game components
 import CardReveal from './components/CardReveal';
 import DiscussionRound from './components/DiscussionRound';
 import RevealImposter from './components/RevealImposter';
-import {
-  assignImposters,
-  assignCards,
-  initializeDiscussion,
-  formatDiscussionForDisplay,
-  getPreviousWords,
-  createRandomPlayerOrder,
-} from './utils/gameLogic';
 
 /**
- * Main App Component - ClashImposter Game
- * Manages game state and flow through different phases
+ * Main App Component - ClashImposter Multiplayer
+ * Manages multiplayer game flow through different screens
  */
 function App() {
-  // Game phase state: 'setup' | 'pass' | 'reveal' | 'discussion' | 'finalReveal'
-  const [gamePhase, setGamePhase] = useState('setup');
+  const { socket, connected } = useSocket();
 
-  // Game settings (from setup screen)
-  const [numPlayers, setNumPlayers] = useState(5);
-  const [numImposters, setNumImposters] = useState(1);
-  const [imposterMode, setImposterMode] = useState('text'); // 'text' or 'similar'
-  const [similarityThreshold, setSimilarityThreshold] = useState(3);
-  const [numRounds, setNumRounds] = useState(2);
-  const [skipToReveal, setSkipToReveal] = useState(false);
+  // Screen state: 'menu' | 'create' | 'join' | 'waiting' | 'card-reveal' | 'discussion' | 'reveal'
+  const [screen, setScreen] = useState('menu');
+
+  // Lobby state
+  const [lobbyCode, setLobbyCode] = useState('');
+  const [lobby, setLobby] = useState(null);
+  const [myCard, setMyCard] = useState(null);
+  const [myPlayerIndex, setMyPlayerIndex] = useState(0);
 
   // Game state
-  const [currentPlayer, setCurrentPlayer] = useState(0); // 0-based index into playerOrder
-  const [currentRound, setCurrentRound] = useState(0); // 0-based index
-  const [imposters, setImposters] = useState([]); // Array of imposter indices
-  const [playerCards, setPlayerCards] = useState([]); // Array of card objects for each player
-  const [realCard, setRealCard] = useState(null); // The real card most players have
-  const [imposterCard, setImposterCard] = useState(null); // The similar card imposters have (if mode is 'similar')
-  const [discussionInputs, setDiscussionInputs] = useState([]); // 2D array [round][player]
-  const [showingCard, setShowingCard] = useState(false); // Whether we're showing the card or pass screen
-  const [playerNames, setPlayerNames] = useState([]); // Array of player names
-  const [playerOrder, setPlayerOrder] = useState([]); // Randomized order of player indices for card reveals
-  const [discussionOrders, setDiscussionOrders] = useState([]); // Array of randomized orders, one per discussion round
+  const [currentRound, setCurrentRound] = useState(0);
+  const [gamePhase, setGamePhase] = useState('waiting'); // 'waiting' | 'card-reveal' | 'discussion' | 'reveal'
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(null);
+  const [currentPlayerName, setCurrentPlayerName] = useState('');
+  const [roundSubmissions, setRoundSubmissions] = useState([]); // Track all submissions for current round
 
-  /**
-   * Start the game with configured settings
-   */
-  const handleStartGame = (settings) => {
-    const { numPlayers, numImposters, imposterMode, similarityThreshold, numRounds, skipToReveal, playerNames } =
-      settings;
+  // Socket event listeners - set up once when socket connects
+  useEffect(() => {
+    if (!socket || !socket.connected) return;
 
-    // Store settings
-    setNumPlayers(numPlayers);
-    setNumImposters(numImposters);
-    setImposterMode(imposterMode);
-    setSimilarityThreshold(similarityThreshold);
-    setNumRounds(numRounds);
-    setSkipToReveal(skipToReveal);
-    setPlayerNames(playerNames);
+    console.log('🔧 Setting up socket listeners for socket:', socket.id);
 
-    // Create randomized player order for card reveals
-    const randomOrder = createRandomPlayerOrder(numPlayers);
-    setPlayerOrder(randomOrder);
+    // Game started - transition to card reveal
+    const handleGameStartedEvent = (data) => {
+      console.log('🎮 GAME STARTED EVENT RECEIVED:', data);
+      setCurrentRound(data.currentRound || 0);
+      setCurrentPlayerIndex(data.currentPlayerIndex);
+      setCurrentPlayerName(data.currentPlayerName || '');
+      setGamePhase('card-reveal');
+      setScreen('card-reveal');
+      setRoundSubmissions([]); // Reset submissions
+    };
 
-    // Create randomized orders for each discussion round
-    const roundOrders = [];
-    for (let i = 0; i < numRounds; i++) {
-      roundOrders.push(createRandomPlayerOrder(numPlayers));
-    }
-    setDiscussionOrders(roundOrders);
+    // Card assigned to this player
+    const handleCardAssigned = ({ card, playerIndex }) => {
+      console.log('🃏 Card assigned:', card);
+      setMyCard(card);
+      setMyPlayerIndex(playerIndex);
+    };
 
-    // Assign imposters
-    const imposterIndices = assignImposters(numPlayers, numImposters);
-    setImposters(imposterIndices);
+    // Discussion submitted confirmation
+    const handleDiscussionSubmitted = ({ roundIndex, input }) => {
+      console.log('✅ Discussion submitted for round', roundIndex);
+      setHasSubmitted(true);
+    };
 
-    // Assign cards
-    const { playerCards, realCard, imposterCard } = assignCards(
-      numPlayers,
-      imposterIndices,
-      imposterMode,
-      similarityThreshold
-    );
-    setPlayerCards(playerCards);
-    setRealCard(realCard);
-    setImposterCard(imposterCard);
+    // Round advanced
+    const handleRoundAdvanced = ({ currentRound, phase, gameState, currentPlayerIndex, currentPlayerName }) => {
+      console.log('⏭️ Round advanced:', { currentRound, phase, gameState });
+      setCurrentRound(currentRound);
+      setHasSubmitted(false); // Reset for next round
+      setRoundSubmissions([]); // Reset submissions for new round
 
-    // Initialize discussion inputs
-    const discussion = initializeDiscussion(numPlayers, numRounds);
-    setDiscussionInputs(discussion);
+      if (currentPlayerIndex !== undefined) {
+        setCurrentPlayerIndex(currentPlayerIndex);
+        setCurrentPlayerName(currentPlayerName || '');
+      }
 
-    // Reset state
-    setCurrentPlayer(0);
-    setCurrentRound(0);
-    setShowingCard(false);
-
-    // Start with pass screen for first player in randomized order
-    setGamePhase('pass');
-  };
-
-  /**
-   * Player taps to reveal their card
-   */
-  const handleRevealCard = () => {
-    setShowingCard(true);
-    setGamePhase('reveal');
-  };
-
-  /**
-   * Move to next player after viewing card
-   */
-  const handleNextPlayer = () => {
-    const nextPlayer = currentPlayer + 1;
-
-    if (nextPlayer < numPlayers) {
-      // More players to reveal
-      setCurrentPlayer(nextPlayer);
-      setShowingCard(false);
-      setGamePhase('pass');
-    } else {
-      // All players have seen cards
-      if (skipToReveal) {
-        // Skip directly to final reveal
-        setGamePhase('finalReveal');
-      } else {
-        // Start discussion rounds
-        setCurrentPlayer(0);
-        setCurrentRound(0);
+      if (phase === 'discussion') {
         setGamePhase('discussion');
+        setScreen('discussion');
+      } else if (phase === 'reveal') {
+        setGamePhase('reveal');
+        setScreen('reveal');
       }
-    }
+    };
+
+    // Turn changed - next player's turn
+    const handleTurnChanged = ({ currentPlayerIndex, currentPlayerName }) => {
+      console.log('👉 Turn changed to:', currentPlayerName);
+      setCurrentPlayerIndex(currentPlayerIndex);
+      setCurrentPlayerName(currentPlayerName);
+    };
+
+    // Player submitted their word
+    const handlePlayerSubmitted = ({ playerIndex, playerName, input, roundIndex }) => {
+      console.log(`✍️ ${playerName} submitted:`, input);
+      setRoundSubmissions(prev => [...prev, { playerIndex, playerName, input, roundIndex }]);
+    };
+
+    // Game restarted - return to waiting room
+    const handleGameRestarted = () => {
+      console.log('🔄 Game restarted, returning to waiting room');
+      setScreen('waiting');
+      setGamePhase('waiting');
+      setMyCard(null);
+      setCurrentRound(0);
+      setHasSubmitted(false);
+      setRoundSubmissions([]);
+    };
+
+    // Returned to lobby
+    const handleReturnedToLobby = () => {
+      console.log('⬅️ Returned to lobby');
+      setScreen('waiting');
+      setGamePhase('waiting');
+      setMyCard(null);
+      setCurrentRound(0);
+      setHasSubmitted(false);
+      setRoundSubmissions([]);
+    };
+
+    // Lobby closed
+    const handleLobbyClosed = ({ reason }) => {
+      console.log('🚪 Lobby closed:', reason);
+      alert(`Lobby closed: ${reason}`);
+      setScreen('menu');
+      setLobbyCode('');
+      setLobby(null);
+      setMyCard(null);
+      setGamePhase('waiting');
+    };
+
+    // Player left
+    const handlePlayerLeft = ({ playerId, players }) => {
+      console.log('👋 Player left:', playerId);
+      setLobby(prev => prev ? { ...prev, players } : null);
+    };
+
+    // Attach listeners
+    socket.on('game-started', handleGameStartedEvent);
+    socket.on('card-assigned', handleCardAssigned);
+    socket.on('discussion-submitted', handleDiscussionSubmitted);
+    socket.on('round-advanced', handleRoundAdvanced);
+    socket.on('turn-changed', handleTurnChanged);
+    socket.on('player-submitted', handlePlayerSubmitted);
+    socket.on('game-restarted', handleGameRestarted);
+    socket.on('returned-to-lobby', handleReturnedToLobby);
+    socket.on('lobby-closed', handleLobbyClosed);
+    socket.on('player-left', handlePlayerLeft);
+
+    console.log('✅ Socket listeners attached');
+
+    // Debug: Log ALL events (add this AFTER specific listeners)
+    socket.onAny((eventName, ...args) => {
+      console.log(`📩 Socket event received: ${eventName}`, args);
+    });
+
+    return () => {
+      console.log('🧹 Cleaning up socket listeners');
+      socket.offAny(); // Remove debug listener
+      socket.off('game-started', handleGameStartedEvent);
+      socket.off('card-assigned', handleCardAssigned);
+      socket.off('discussion-submitted', handleDiscussionSubmitted);
+      socket.off('round-advanced', handleRoundAdvanced);
+      socket.off('turn-changed', handleTurnChanged);
+      socket.off('player-submitted', handlePlayerSubmitted);
+      socket.off('game-restarted', handleGameRestarted);
+      socket.off('returned-to-lobby', handleReturnedToLobby);
+      socket.off('lobby-closed', handleLobbyClosed);
+      socket.off('player-left', handlePlayerLeft);
+    };
+  }, [socket?.connected]); // Only re-run when socket connection state changes
+
+  // Handlers
+  const handleBackToMenu = () => {
+    setScreen('menu');
+    setLobbyCode('');
+    setLobby(null);
+    setMyCard(null);
+    setGamePhase('waiting');
   };
 
-  /**
-   * Handle discussion input submission
-   */
+  const handleLobbyCreated = (code, lobbyData) => {
+    console.log('✅ Lobby created:', code);
+    setLobbyCode(code);
+    setLobby(lobbyData);
+    setScreen('waiting');
+  };
+
+  const handleLobbyJoined = (code, lobbyData) => {
+    console.log('✅ Joined lobby:', code);
+    setLobbyCode(code);
+    setLobby(lobbyData);
+    setScreen('waiting');
+  };
+
+  const handleCardRevealed = () => {
+    console.log('🃏 Card revealed, moving to discussion...');
+    // Move directly to discussion after seeing card
+    setGamePhase('discussion');
+    setScreen('discussion');
+  };
+
   const handleDiscussionSubmit = (input) => {
-    // Get the actual player index from the current round's randomized order
-    const currentRoundOrder = discussionOrders[currentRound] || [];
-    const actualPlayerIndex = currentRoundOrder[currentPlayer];
+    if (!socket || !lobbyCode) return;
 
-    // Update discussion inputs
-    const updatedInputs = [...discussionInputs];
-    updatedInputs[currentRound][actualPlayerIndex] = input;
-    setDiscussionInputs(updatedInputs);
+    console.log('💬 Submitting discussion:', input);
 
-    // Move to next player in order
-    const nextPlayer = currentPlayer + 1;
+    // Submit to server
+    socket.emit('submit-discussion', {
+      code: lobbyCode,
+      roundIndex: currentRound,
+      input: input
+    });
 
-    if (nextPlayer < numPlayers) {
-      // More players in this round
-      setCurrentPlayer(nextPlayer);
-    } else {
-      // Round complete, check if more rounds
-      const nextRound = currentRound + 1;
-
-      if (nextRound < numRounds) {
-        // Start next round with new randomized order
-        setCurrentPlayer(0);
-        setCurrentRound(nextRound);
-      } else {
-        // All rounds complete, show final reveal
-        setGamePhase('finalReveal');
-      }
-    }
+    // Confirmation handled by socket event
   };
 
-  /**
-   * Restart the game
-   */
-  const handleRestart = () => {
-    setGamePhase('setup');
-    setCurrentPlayer(0);
-    setCurrentRound(0);
-    setShowingCard(false);
+  const handleRequestRevealData = () => {
+    if (!socket || !lobbyCode) return;
+
+    socket.emit('get-reveal-data', { code: lobbyCode });
+
+    socket.once('reveal-data', (data) => {
+      console.log('📊 Reveal data received:', data);
+      // Data will be used by RevealImposter component
+    });
   };
 
-  /**
-   * Handle share button (placeholder for now)
-   */
-  const handleShare = () => {
-    // For now, just alert - ShareImage component handles actual sharing
-    alert('Share functionality! Take a screenshot or use the download button.');
-  };
-
-  // Get current player index based on game phase
-  // For card reveals, use playerOrder; for discussions, use the current round's order
-  let currentPlayerIndex = 0;
-  if (gamePhase === 'pass' || gamePhase === 'reveal') {
-    currentPlayerIndex = playerOrder[currentPlayer] || 0;
-  } else if (gamePhase === 'discussion') {
-    const currentRoundOrder = discussionOrders[currentRound] || [];
-    currentPlayerIndex = currentRoundOrder[currentPlayer] || 0;
-  }
-  const currentPlayerName = playerNames[currentPlayerIndex] || `Player ${currentPlayerIndex + 1}`;
-
-  // Render appropriate screen based on game phase
-  return (
-    <div className="min-h-screen bg-blue-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {gamePhase === 'setup' && <GameSetup onStartGame={handleStartGame} />}
-
-        {gamePhase === 'pass' && (
-          <PassDevice
-            playerName={currentPlayerName}
-            onContinue={handleRevealCard}
-          />
-        )}
-
-        {gamePhase === 'reveal' && (
-          <CardReveal
-            card={playerCards[currentPlayerIndex]}
-            playerName={currentPlayerName}
-            onNext={handleNextPlayer}
-          />
-        )}
-
-        {gamePhase === 'discussion' && (
-          <DiscussionRound
-            roundNumber={currentRound + 1}
-            playerName={currentPlayerName}
-            previousWords={getPreviousWords(
-              discussionInputs,
-              currentPlayerIndex,
-              currentRound
-            )}
-            onSubmit={handleDiscussionSubmit}
-          />
-        )}
-
-        {gamePhase === 'finalReveal' && (
-          <RevealImposter
-            discussionSummary={formatDiscussionForDisplay(
-              discussionInputs,
-              numPlayers,
-              playerNames,
-              discussionOrders.length > 0 ? discussionOrders[0] : playerOrder
-            )}
-            imposterIndices={imposters}
-            realCard={realCard}
-            imposterCard={imposterCard}
-            imposterMode={imposterMode}
-            skipToReveal={skipToReveal}
-            playerNames={playerNames}
-            onRestart={handleRestart}
-            onShare={handleShare}
-          />
-        )}
+  // Connection indicator
+  if (!connected) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🔄</div>
+          <h2 className="text-2xl text-white font-bold mb-2">Connecting to server...</h2>
+          <p className="text-white/60">Please wait</p>
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen">
+      {/* Main Menu */}
+      {screen === 'menu' && (
+        <MainMenu
+          onCreateLobby={() => setScreen('create')}
+          onJoinLobby={() => setScreen('join')}
+        />
+      )}
+
+      {/* Create Lobby */}
+      {screen === 'create' && (
+        <LobbyCreate onLobbyCreated={handleLobbyCreated} />
+      )}
+
+      {/* Join Lobby */}
+      {screen === 'join' && (
+        <LobbyJoin onLobbyJoined={handleLobbyJoined} />
+      )}
+
+      {/* Waiting Room */}
+      {screen === 'waiting' && lobby && (
+        <WaitingRoom
+          lobbyCode={lobbyCode}
+          lobby={lobby}
+        />
+      )}
+
+      {/* Card Reveal */}
+      {screen === 'card-reveal' && myCard && (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
+          <div className="max-w-md w-full">
+            <CardReveal
+              card={myCard}
+              playerName="You"
+              onNext={handleCardRevealed}
+            />
+            <div className="mt-4 text-center">
+              <p className="text-white/70 text-sm">
+                Waiting for all players to see their cards...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discussion Round */}
+      {screen === 'discussion' && lobbyCode && lobby && (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-4">
+          {/* Back to Lobby Button */}
+          <div className="max-w-6xl mx-auto mb-4">
+            <button
+              onClick={() => socket.emit('back-to-lobby', { code: lobbyCode })}
+              className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/20 transition-all"
+            >
+              ← Back to Lobby
+            </button>
+          </div>
+
+          <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-4">
+            {/* Discussion Input - Takes 2 columns */}
+            <div className="lg:col-span-2 flex items-center justify-center">
+              <div className="w-full max-w-md">
+                {/* Turn Indicator */}
+                <div className="mb-4 p-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl text-center">
+                  <p className="text-white/70 text-sm mb-1">Current Turn</p>
+                  <p className="text-white text-xl font-bold">{currentPlayerName}</p>
+                  {currentPlayerIndex === myPlayerIndex && (
+                    <p className="text-yellow-400 text-sm mt-1">It's your turn!</p>
+                  )}
+                  {currentPlayerIndex !== myPlayerIndex && (
+                    <p className="text-white/60 text-sm mt-1">Waiting...</p>
+                  )}
+                </div>
+
+                {!hasSubmitted && currentPlayerIndex === myPlayerIndex ? (
+                  <DiscussionRound
+                    roundNumber={currentRound + 1}
+                    playerName="You"
+                    previousWords=""
+                    onSubmit={handleDiscussionSubmit}
+                  />
+                ) : (
+                  <div className="card-base card-noise p-8 text-center">
+                    <div className="text-6xl mb-6">
+                      {hasSubmitted ? '✅' : '⏳'}
+                    </div>
+                    <h2 className="text-3xl text-white font-bold mb-4">
+                      {hasSubmitted ? 'Submitted!' : 'Waiting...'}
+                    </h2>
+                    <p className="text-white/70 text-lg">
+                      {hasSubmitted
+                        ? 'Waiting for other players to submit their answers...'
+                        : `Waiting for ${currentPlayerName} to submit...`
+                      }
+                    </p>
+                    <div className="mt-6 flex items-center justify-center gap-2">
+                      <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
+                      <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                      <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Submissions Sidebar - 1 column */}
+            <div className="lg:col-span-1">
+              <div className="card-base card-noise p-4 h-full">
+                <h3 className="text-white font-bold text-lg mb-4">Round {currentRound + 1} Submissions</h3>
+                <div className="space-y-2">
+                  {roundSubmissions.map((sub, idx) => (
+                    <div key={idx} className="bg-white/10 rounded-lg p-3 border border-white/20">
+                      <p className="text-yellow-400 text-sm font-semibold">{sub.playerName}</p>
+                      <p className="text-white text-base mt-1">{sub.input}</p>
+                    </div>
+                  ))}
+                  {roundSubmissions.length === 0 && (
+                    <p className="text-white/50 text-sm text-center py-4">
+                      No submissions yet...
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Chat Sidebar - 1 column */}
+            <div className="lg:col-span-1">
+              <GameChat lobbyCode={lobbyCode} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Final Reveal */}
+      {screen === 'reveal' && socket && (
+        <RevealComponent
+          socket={socket}
+          lobbyCode={lobbyCode}
+          onPlayAgain={() => socket.emit('play-again', { code: lobbyCode })}
+          onBackToMenu={handleBackToMenu}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Reveal Component - Fetches and displays final reveal data
+ */
+function RevealComponent({ socket, lobbyCode, onPlayAgain, onBackToMenu }) {
+  const [revealData, setRevealData] = useState(null);
+
+  useEffect(() => {
+    // Request reveal data from server
+    socket.emit('get-reveal-data', { code: lobbyCode });
+
+    socket.once('reveal-data', (data) => {
+      console.log('📊 Reveal data:', data);
+      setRevealData(data);
+    });
+  }, [socket, lobbyCode]);
+
+  if (!revealData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🎭</div>
+          <h2 className="text-2xl text-white font-bold mb-2">Loading results...</h2>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {/* Back to Menu Button - Top left */}
+      <div className="absolute top-4 left-4 z-50">
+        <button
+          onClick={onBackToMenu}
+          className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/20 transition-all"
+        >
+          ← Main Menu
+        </button>
+      </div>
+
+      {/* Play Again Button - Top right */}
+      <div className="absolute top-4 right-4 z-50">
+        <button
+          onClick={onPlayAgain}
+          className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-blue-950 font-bold rounded-lg shadow-lg transition-all transform hover:scale-105"
+        >
+          🔄 Play Again
+        </button>
+      </div>
+
+      <RevealImposter
+        discussionSummary={revealData.discussionSummary}
+        imposterIndices={revealData.imposters.map(i => i.index)}
+        realCard={revealData.realCard}
+        imposterCard={revealData.imposterCard}
+        imposterMode={revealData.imposterMode}
+        skipToReveal={false}
+        playerNames={revealData.playerNames}
+        onRestart={onPlayAgain}
+        onShare={() => {}}
+      />
     </div>
   );
 }
