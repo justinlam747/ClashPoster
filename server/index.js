@@ -63,8 +63,8 @@ app.get('/api/stats', (req, res) => {
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../dist')));
 
-  // Catch-all route for SPA - must use '/*' in Express 5+
-  app.get('/*', (req, res) => {
+  // Catch-all route for SPA (Express 4)
+  app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   });
 }
